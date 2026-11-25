@@ -112,8 +112,59 @@ def handle_answer(c):
         bot.answer_callback_query(c.id, "Xato!", show_alert=True)
 
 
+
+import threading
+import datetime
+
+def _run(cmd):
+    """Buyruqni bajaradi. Xato bo'lsa matnini qaytaradi, aks holda None."""
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        return (r.stderr or r.stdout).strip()
+    return None
+
+def auto_github_push():
+    """Har soatda FAQAT o'zgarish bo'lsa GitHub'ga yuklaydi."""
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(repo_dir)
+
+    while True:
+        try:
+            # 1) O'zgarish bormi?
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True
+            ).stdout.strip()
+
+            if not status:
+                print("ℹ️  O'zgarish yo'q, yuklash shart emas")
+            else:
+                # 2) Stage
+                err = _run(["git", "add", "-A"])
+                if err:
+                    print("❌ git add xato:", err); time.sleep(3600); continue
+
+                # 3) Commit
+                msg = "Avtomatik yangilanish: " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                err = _run(["git", "commit", "-m", msg])
+                if err:
+                    print("❌ git commit xato:", err); time.sleep(3600); continue
+
+                # 4) Push
+                err = _run(["git", "push", "origin", "main"])
+                if err:
+                    print("❌ git push xato:", err)
+                else:
+                    print("✅ GitHub'ga yuklandi:", msg)
+
+        except Exception as e:
+            print("❌ auto_github_push xato:", e)
+
+        time.sleep(3600)
+
 # ============ ISHGA TUSHIRISH ============
 if __name__ == "__main__":
     print("Bot ishga tushdi...")
+    threading.Thread(target=auto_github_push, daemon=True).start()
     auto_backup()
     bot.polling(none_stop=True)
